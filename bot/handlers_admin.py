@@ -15,7 +15,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from aiogram import F, Router
+import asyncio
+import logging
+
+from aiogram import Bot, F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -29,6 +32,8 @@ from aiogram.types import (
 from . import texts
 from .config import config
 from .storage import storage
+
+logger = logging.getLogger(__name__)
 
 router = Router(name="admin")
 
@@ -57,11 +62,18 @@ class NewEvent(StatesGroup):
     link = State()
 
 
+class Broadcast(StatesGroup):
+    # Waiting for the message to forward. The target audience (all users, or a
+    # specific event's participants) is stored in FSM data under "target".
+    message = State()
+
+
 def _admin_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="Создать мероприятие", callback_data="adm:new")],
             [InlineKeyboardButton(text="Удалить мероприятие", callback_data="adm:del")],
+            [InlineKeyboardButton(text="Отправить сообщение", callback_data="adm:msg")],
         ]
     )
 
@@ -234,6 +246,137 @@ async def step_link(message: Message, state: FSMContext) -> None:
         f"Участники: /who_{event.id}\n\n"
         f"{texts.FOOTER_HOME}",
         parse_mode="HTML",
+    )
+
+
+# ----- broadcast flow ------------------------------------------------------ #
+
+# Regex for "/send_<id>" used to pick an event's participants as the audience.
+_SEND_RE = r"^/send_(\d+)(?:@\w+)?$"
+
+
+def _broadcast_menu_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Отправить всем", callback_data="adm:msgall")],
+            [
+                InlineKeyboardButton(
+                    text="Отправить участникам события",
+                    callback_data="adm:msgevent",
+                )
+            ],
+            [InlineKeyboardButton(text="Отмена", callback_data="adm:abort")],
+        ]
+    )
+
+
+@router.callback_query(F.data == "adm:msg")
+async def cb_msg(callback: CallbackQuery) -> None:
+    await callback.message.edit_text(
+        "Кому отправить сообщение?",
+        reply_markup=_broadcast_menu_kb(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "adm:msgall")
+async def cb_msg_all(callback: CallbackQuery, state: FSMContext) -> None:
+    # Audience "all" = every user that has ever interacted with the bot.
+    await state.set_state(Broadcast.message)
+    await state.update_data(target="all")
+    count = len(storage.all_user_ids)
+    await callback.message.edit_text(
+        f"Теперь пришлите сообщение, которое нужно отправить всем "
+        f"({count}). Можно текст, фото — что угодно.",
+        reply_markup=_cancel_kb(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "adm:msgevent")
+async def cb_msg_event(callback: CallbackQuery) -> None:
+    events = storage.all_events()
+    if not events:
+        await callback.message.edit_text(
+            f"Событий нет.\n\n{texts.FOOTER_HOME}"
+        )
+        await callback.answer()
+        return
+
+    # List events so the admin picks the target audience via /send_<id>.
+    lines = ["Кому из участников отправить? Выберите событие:", ""]
+    for ev in events:
+        count = len(ev.participants)
+        lines.append(
+            f"<b>{texts.escape_title(ev.title)}</b>\n"
+            f"{texts.format_dt(ev.start_dt)} — {count} {texts.plural_people(count)}\n"
+            f"/send_{ev.id}"
+        )
+    await callback.message.edit_text(
+        "\n\n".join(lines),
+        reply_markup=_cancel_kb(),
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@router.message(F.text.regexp(_SEND_RE))
+async def cmd_send(message: Message, state: FSMContext) -> None:
+    import re
+
+    event_id = int(re.match(_SEND_RE, message.text).group(1))
+    event = storage.get(event_id)
+    if event is None:
+        await message.answer(f"Такого события нет.\n\n{texts.FOOTER_HOME}")
+        return
+
+    await state.set_state(Broadcast.message)
+    await state.update_data(target="event", event_id=event_id)
+    count = len(event.participants)
+    await message.answer(
+        f"Теперь пришлите сообщение, которое нужно отправить всем "
+        f"участникам «{texts.escape_title(event.title)}» "
+        f"({count} {texts.plural_people(count)}).",
+        reply_markup=_cancel_kb(),
+        parse_mode="HTML",
+    )
+
+
+@router.message(Broadcast.message)
+async def step_broadcast(message: Message, state: FSMContext, bot: Bot) -> None:
+    data = await state.get_data()
+    await state.clear()
+
+    if data.get("target") == "event":
+        event = storage.get(data["event_id"])
+        if event is None:
+            await message.answer(f"Событие пропало.\n\n{texts.FOOTER_HOME}")
+            return
+        recipients = list(event.participants)
+    else:
+        recipients = storage.all_user_ids
+
+    # Copy the admin's message verbatim to each recipient. copy_message sends a
+    # standalone copy (not a "forwarded from" header) of any content type.
+    sent = 0
+    failed = 0
+    for uid in recipients:
+        try:
+            await bot.copy_message(
+                chat_id=uid,
+                from_chat_id=message.chat.id,
+                message_id=message.message_id,
+            )
+            sent += 1
+        except Exception as exc:  # noqa: BLE001 - one bad recipient must not stop the run
+            failed += 1
+            logger.warning("Broadcast to %s failed: %s", uid, exc)
+        # Stay comfortably under Telegram's ~30 msg/sec broadcast limit.
+        await asyncio.sleep(0.05)
+
+    await message.answer(
+        f"Готово. Доставлено: {sent}. Не доставлено: {failed}.\n\n"
+        f"{texts.FOOTER_HOME}"
     )
 
 
