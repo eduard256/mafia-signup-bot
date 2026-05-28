@@ -1,0 +1,20 @@
+# Environment / secrets
+.env
+
+# Runtime data (created at runtime, must not be committed)
+data/*.json
+!data/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
