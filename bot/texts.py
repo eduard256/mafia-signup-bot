@@ -80,7 +80,7 @@ def render_event_card(event: Event, *, user_id: int) -> str:
     if event.description:
         lines.append(escape(event.description))
 
-    lines.append(f"В деле: {count} {plural_people(count)}")
+    lines.append(f"В деле: {count} {plural_people(count)} — /who_{event.id}")
 
     if signed:
         lines.append(f"Ты записан. Передумал? /cancel_{event.id}")
@@ -134,6 +134,45 @@ def not_signed_up(event: Event) -> str:
 
 def event_not_found() -> str:
     return "Такого мероприятия нет — возможно, оно уже прошло. Смотри /start."
+
+
+# --------------------------------------------------------------------------- #
+# Participants list
+# --------------------------------------------------------------------------- #
+
+def format_participant(
+    user_id: int, *, username: str | None, full_name: str | None
+) -> str:
+    """Render one participant line.
+
+    Prefers a public ``@username``; otherwise falls back to the display name
+    rendered as a clickable ``tg://user`` mention so it is tappable even without
+    a username. The numeric id is used only if nothing else is available.
+    """
+    if username:
+        return f"@{escape(username)}"
+    name = full_name or str(user_id)
+    return f'<a href="tg://user?id={user_id}">{escape(name)}</a>'
+
+
+def render_participants(event: Event, lines: list[str]) -> str:
+    """Assemble the full participants message for an event."""
+    count = len(event.participants)
+    header = (
+        f"<b>{escape(event.title)}</b>\n"
+        f"{format_dt(event.start_dt)}\n"
+        f"Записано: {count} {plural_people(count)}"
+    )
+    body = "\n".join(f"{i}. {line}" for i, line in enumerate(lines, start=1))
+    return f"{header}\n\n{body}"
+
+
+def no_participants(event: Event) -> str:
+    return (
+        f"<b>{escape(event.title)}</b>\n"
+        f"{format_dt(event.start_dt)}\n\n"
+        f"Пока никто не записан. Будь первым: /add_{event.id}"
+    )
 
 
 # --------------------------------------------------------------------------- #

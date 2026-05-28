@@ -31,6 +31,7 @@ router = Router(name="public")
 # Telegram appends in group chats (e.g. "/add_12@MyBot").
 _ADD_RE = re.compile(r"^/add_(\d+)(?:@\w+)?$")
 _CANCEL_RE = re.compile(r"^/cancel_(\d+)(?:@\w+)?$")
+_WHO_RE = re.compile(r"^/who_(\d+)(?:@\w+)?$")
 
 
 def _now() -> datetime:
@@ -91,3 +92,37 @@ async def cmd_cancel(message: Message) -> None:
 
     storage.remove_participant(event_id, message.chat.id)
     await message.answer(texts.cancelled(event), parse_mode="HTML")
+
+
+@router.message(F.text.regexp(_WHO_RE))
+async def cmd_who(message: Message, bot: Bot) -> None:
+    """Show the public list of participants for an event with @usernames."""
+    event_id = int(_WHO_RE.match(message.text).group(1))
+    event = storage.get(event_id)
+    if event is None:
+        await message.answer(texts.event_not_found(), parse_mode="HTML")
+        return
+
+    if not event.participants:
+        await message.answer(texts.no_participants(event), parse_mode="HTML")
+        return
+
+    # Resolve each participant best-effort: prefer @username, fall back to a
+    # clickable name mention. One failed lookup must not break the whole list.
+    lines: list[str] = []
+    for uid in event.participants:
+        try:
+            chat = await bot.get_chat(uid)
+            lines.append(
+                texts.format_participant(
+                    uid, username=chat.username, full_name=chat.full_name
+                )
+            )
+        except Exception:
+            lines.append(texts.format_participant(uid, username=None, full_name=None))
+
+    await message.answer(
+        texts.render_participants(event, lines),
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+    )

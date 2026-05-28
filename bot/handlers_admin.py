@@ -15,8 +15,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from aiogram import Bot, F, Router
-from aiogram.filters import Command, StateFilter
+from aiogram import F, Router
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
@@ -256,33 +256,3 @@ async def cb_del_item(callback: CallbackQuery) -> None:
         f"({texts.format_dt(event.start_dt)})."
     )
     await callback.answer()
-
-
-# ----- participants view --------------------------------------------------- #
-
-@router.message(StateFilter(None), F.text.regexp(r"^/who_(\d+)(?:@\w+)?$"))
-async def cmd_who(message: Message, bot: Bot) -> None:
-    import re
-
-    event_id = int(re.match(r"^/who_(\d+)", message.text).group(1))
-    event = storage.get(event_id)
-    if event is None:
-        await message.answer("Такого мероприятия нет.")
-        return
-
-    if not event.participants:
-        await message.answer(
-            f"На «{texts.escape_title(event.title)}» пока никто не записан."
-        )
-        return
-
-    # Resolve names best-effort; fall back to the numeric id.
-    lines = [f"<b>{texts.escape_title(event.title)}</b> — участники:"]
-    for idx, uid in enumerate(event.participants, start=1):
-        try:
-            chat = await bot.get_chat(uid)
-            name = chat.full_name or (f"@{chat.username}" if chat.username else str(uid))
-        except Exception:
-            name = str(uid)
-        lines.append(f"{idx}. {texts.escape_title(name)}")
-    await message.answer("\n".join(lines), parse_mode="HTML")
