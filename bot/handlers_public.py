@@ -74,6 +74,10 @@ async def cmd_add(message: Message, bot: Bot) -> None:
         await message.answer(texts.already_signed_up(event), parse_mode="HTML")
         return
 
+    if event.is_full:
+        await message.answer(texts.event_full(event), parse_mode="HTML")
+        return
+
     storage.add_participant(event_id, message.chat.id)
     await send_photo(bot, message.chat.id, "cards", texts.signed_up(event))
 

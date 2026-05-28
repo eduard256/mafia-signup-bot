@@ -43,6 +43,9 @@ class Event:
     link: str               # meeting URL announced when the event starts
     # Naive wall-clock start time (in config.timezone) as ISO string.
     start: str
+    # Maximum number of participants. 0 means unlimited (kept for backward
+    # compatibility with events created before capacity existed).
+    capacity: int = 0
     participants: list[int] = field(default_factory=list)
     # Reminder offsets (in minutes) that have already been delivered, so the
     # scheduler never sends the same reminder twice across restarts.
@@ -56,6 +59,18 @@ class Event:
     def is_signed_up(self, user_id: int) -> bool:
         return user_id in self.participants
 
+    @property
+    def is_full(self) -> bool:
+        """True when capacity is set and all seats are taken."""
+        return self.capacity > 0 and len(self.participants) >= self.capacity
+
+    @property
+    def seats_left(self) -> int | None:
+        """Remaining free seats, or None when the event is unlimited."""
+        if self.capacity <= 0:
+            return None
+        return max(0, self.capacity - len(self.participants))
+
     def to_dict(self) -> dict:
         return {
             "id": self.id,
@@ -64,6 +79,7 @@ class Event:
             "description": self.description,
             "link": self.link,
             "start": self.start,
+            "capacity": self.capacity,
             "participants": self.participants,
             "sent_reminders": self.sent_reminders,
         }
@@ -77,6 +93,7 @@ class Event:
             description=data.get("description", ""),
             link=data["link"],
             start=data["start"],
+            capacity=int(data.get("capacity", 0)),
             participants=list(data.get("participants", [])),
             sent_reminders=list(data.get("sent_reminders", [])),
         )
@@ -171,7 +188,14 @@ class Storage:
     # ----- events: mutations ------------------------------------------- #
 
     def create_event(
-        self, *, kind: str, title: str, description: str, link: str, start: str
+        self,
+        *,
+        kind: str,
+        title: str,
+        description: str,
+        link: str,
+        start: str,
+        capacity: int,
     ) -> Event:
         event = Event(
             id=self._next_id,
@@ -180,6 +204,7 @@ class Storage:
             description=description,
             link=link,
             start=start,
+            capacity=capacity,
         )
         self._events[event.id] = event
         self._next_id += 1

@@ -53,6 +53,7 @@ class NewEvent(StatesGroup):
     date = State()
     time = State()
     description = State()
+    capacity = State()
     link = State()
 
 
@@ -184,6 +185,25 @@ async def step_description(message: Message, state: FSMContext) -> None:
     if desc == "-":
         desc = ""
     await state.update_data(description=desc)
+    await state.set_state(NewEvent.capacity)
+    await message.answer(
+        "Лимит участников — число (например, <b>15</b>). "
+        "Если игроков много, поставь большое число, например 100:",
+        reply_markup=_cancel_kb(),
+        parse_mode="HTML",
+    )
+
+
+@router.message(NewEvent.capacity)
+async def step_capacity(message: Message, state: FSMContext) -> None:
+    raw = message.text.strip()
+    if not raw.isdigit() or int(raw) <= 0:
+        await message.answer(
+            "Нужно положительное число. Например, 15.",
+            reply_markup=_cancel_kb(),
+        )
+        return
+    await state.update_data(capacity=int(raw))
     await state.set_state(NewEvent.link)
     await message.answer(
         "Ссылка на комнату (её разошлю в момент старта):",
@@ -200,6 +220,7 @@ async def step_link(message: Message, state: FSMContext) -> None:
         description=data["description"],
         link=message.text.strip(),
         start=data["start"],
+        capacity=data["capacity"],
     )
     await state.clear()
 
@@ -208,6 +229,7 @@ async def step_link(message: Message, state: FSMContext) -> None:
         "<b>Мероприятие создано.</b>\n\n"
         f"{texts.escape_title(event.title)}\n"
         f"{texts.format_dt(start_dt)}\n"
+        f"Лимит: {event.capacity}\n"
         f"Команда записи: /add_{event.id}\n"
         f"Участники: /who_{event.id}\n\n"
         f"{texts.FOOTER_HOME}",

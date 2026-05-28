@@ -86,10 +86,17 @@ def render_event_card(event: Event, *, user_id: int) -> str:
     if event.description:
         lines.append(escape(event.description))
 
-    lines.append(f"В деле: {count} {plural_people(count)} — /who_{event.id}")
+    if event.capacity > 0:
+        lines.append(
+            f"В деле: {count}/{event.capacity} — /who_{event.id}"
+        )
+    else:
+        lines.append(f"В деле: {count} {plural_people(count)} — /who_{event.id}")
 
     if signed:
         lines.append(f"Ты записан. Передумал? /cancel_{event.id}")
+    elif event.is_full:
+        lines.append("Регистрация закончилась — мест нет.")
     else:
         lines.append(f"Записаться: /add_{event.id}")
 
@@ -148,6 +155,14 @@ def event_not_found() -> str:
     )
 
 
+def event_full(event: Event) -> str:
+    return (
+        f"Регистрация на «{escape(event.title)}» закончилась — "
+        f"все {event.capacity} мест заняты.\n\n"
+        f"{FOOTER_REFRESH}"
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Participants list
 # --------------------------------------------------------------------------- #
@@ -170,10 +185,16 @@ def format_participant(
 def render_participants(event: Event, lines: list[str]) -> str:
     """Assemble the full participants message for an event."""
     count = len(event.participants)
+    if event.capacity > 0:
+        counter = f"Записано: {count}/{event.capacity}"
+        if event.is_full:
+            counter += " — мест нет"
+    else:
+        counter = f"Записано: {count} {plural_people(count)}"
     header = (
         f"<b>{escape(event.title)}</b>\n"
         f"{format_dt(event.start_dt)}\n"
-        f"Записано: {count} {plural_people(count)}"
+        f"{counter}"
     )
     body = "\n".join(f"{i}. {line}" for i, line in enumerate(lines, start=1))
     return f"{header}\n\n{body}\n\n{FOOTER_REFRESH}"
