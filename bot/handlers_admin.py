@@ -77,7 +77,7 @@ def _cancel_kb() -> InlineKeyboardMarkup:
 async def cmd_admin(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer(
-        "<b>Панель семьи.</b>\nЧто делаем?",
+        f"<b>Панель семьи.</b>\nЧто делаем?\n\n{texts.FOOTER_HOME}",
         reply_markup=_admin_menu_kb(),
         parse_mode="HTML",
     )
@@ -86,7 +86,7 @@ async def cmd_admin(message: Message, state: FSMContext) -> None:
 @router.callback_query(F.data == "adm:abort")
 async def cb_abort(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
-    await callback.message.edit_text("Отменено.")
+    await callback.message.edit_text(f"Отменено.\n\n{texts.FOOTER_HOME}")
     await callback.answer()
 
 
@@ -209,7 +209,8 @@ async def step_link(message: Message, state: FSMContext) -> None:
         f"{texts.escape_title(event.title)}\n"
         f"{texts.format_dt(start_dt)}\n"
         f"Команда записи: /add_{event.id}\n"
-        f"Участники: /who_{event.id}",
+        f"Участники: /who_{event.id}\n\n"
+        f"{texts.FOOTER_HOME}",
         parse_mode="HTML",
     )
 
@@ -220,7 +221,9 @@ async def step_link(message: Message, state: FSMContext) -> None:
 async def cb_del_list(callback: CallbackQuery) -> None:
     events = storage.all_events()
     if not events:
-        await callback.message.edit_text("Удалять нечего — список пуст.")
+        await callback.message.edit_text(
+            f"Удалять нечего — список пуст.\n\n{texts.FOOTER_HOME}"
+        )
         await callback.answer()
         return
 
@@ -246,13 +249,13 @@ async def cb_del_item(callback: CallbackQuery) -> None:
     event_id = int(callback.data.split(":")[2])
     event = storage.get(event_id)
     if event is None:
-        await callback.message.edit_text("Уже удалено.")
+        await callback.message.edit_text(f"Уже удалено.\n\n{texts.FOOTER_HOME}")
         await callback.answer()
         return
 
     storage.delete_event(event_id)
     await callback.message.edit_text(
         f"Удалено: «{texts.escape_title(event.title)}» "
-        f"({texts.format_dt(event.start_dt)})."
+        f"({texts.format_dt(event.start_dt)}).\n\n{texts.FOOTER_HOME}"
     )
     await callback.answer()

@@ -47,14 +47,15 @@ async def cmd_start(message: Message, bot: Bot) -> None:
     if not events:
         await send_photo(
             bot, message.chat.id, "welcome",
-            f"{texts.START_GREETING}\n\n{texts.NO_EVENTS}",
+            f"{texts.START_GREETING}\n\n{texts.NO_EVENTS}"
+            f"\n\n{texts.FOOTER_REFRESH}",
         )
         return
 
     listing = texts.render_event_list(events, user_id=message.chat.id)
     await send_photo(
         bot, message.chat.id, "welcome",
-        f"{texts.START_GREETING}\n\n{listing}",
+        f"{texts.START_GREETING}\n\n{listing}\n\n{texts.FOOTER_REFRESH}",
     )
 
 

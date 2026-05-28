@@ -63,6 +63,12 @@ NO_EVENTS = (
 # Shown to non-admins who try to use admin commands.
 NOT_ADMIN = "Эта команда только для того, кто держит семью."
 
+# Plain-text footers (not buttons) appended to the bottom of messages. Each is
+# just a hint that points back to /start, which refreshes the listing.
+FOOTER_REFRESH = "Обновить данные: /start"
+FOOTER_SIGNUP_MORE = "Записаться ещё: /start"
+FOOTER_HOME = "Главная: /start"
+
 
 # --------------------------------------------------------------------------- #
 # Event rendering
@@ -104,36 +110,42 @@ def render_event_list(events: list[Event], *, user_id: int) -> str:
 def signed_up(event: Event) -> str:
     return (
         f"Готово. Ты в деле на «{escape(event.title)}» "
-        f"({format_dt(event.start_dt)}).\n\n"
-        f"Можешь записаться и на другие вечера — /start.\n"
-        f"Передумаешь — /cancel_{event.id}."
+        f"({format_dt(event.start_dt)}).\n"
+        f"Передумаешь — /cancel_{event.id}.\n\n"
+        f"{FOOTER_SIGNUP_MORE}"
     )
 
 
 def already_signed_up(event: Event) -> str:
     return (
         f"Ты уже записан на «{escape(event.title)}» "
-        f"({format_dt(event.start_dt)}).\n\n"
-        f"Отменить запись: /cancel_{event.id}"
+        f"({format_dt(event.start_dt)}).\n"
+        f"Отменить запись: /cancel_{event.id}\n\n"
+        f"{FOOTER_SIGNUP_MORE}"
     )
 
 
 def cancelled(event: Event) -> str:
     return (
-        f"Запись на «{escape(event.title)}» отменена.\n\n"
-        f"Передумаешь — /add_{event.id}."
+        f"Запись на «{escape(event.title)}» отменена.\n"
+        f"Передумаешь — /add_{event.id}.\n\n"
+        f"{FOOTER_REFRESH}"
     )
 
 
 def not_signed_up(event: Event) -> str:
     return (
-        f"Ты и не был записан на «{escape(event.title)}».\n\n"
-        f"Записаться: /add_{event.id}"
+        f"Ты и не был записан на «{escape(event.title)}».\n"
+        f"Записаться: /add_{event.id}\n\n"
+        f"{FOOTER_REFRESH}"
     )
 
 
 def event_not_found() -> str:
-    return "Такого мероприятия нет — возможно, оно уже прошло. Смотри /start."
+    return (
+        "Такого мероприятия нет — возможно, оно уже прошло.\n\n"
+        f"{FOOTER_REFRESH}"
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -164,14 +176,15 @@ def render_participants(event: Event, lines: list[str]) -> str:
         f"Записано: {count} {plural_people(count)}"
     )
     body = "\n".join(f"{i}. {line}" for i, line in enumerate(lines, start=1))
-    return f"{header}\n\n{body}"
+    return f"{header}\n\n{body}\n\n{FOOTER_REFRESH}"
 
 
 def no_participants(event: Event) -> str:
     return (
         f"<b>{escape(event.title)}</b>\n"
         f"{format_dt(event.start_dt)}\n\n"
-        f"Пока никто не записан. Будь первым: /add_{event.id}"
+        f"Пока никто не записан. Будь первым: /add_{event.id}\n\n"
+        f"{FOOTER_REFRESH}"
     )
 
 
