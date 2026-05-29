@@ -31,6 +31,7 @@ from aiogram.types import (
 
 from . import texts
 from .config import config
+from .meet import MeetError, create_room
 from .storage import storage
 
 logger = logging.getLogger(__name__)
@@ -59,7 +60,6 @@ class NewEvent(StatesGroup):
     time = State()
     description = State()
     capacity = State()
-    link = State()
 
 
 class Broadcast(StatesGroup):
@@ -215,24 +215,31 @@ async def step_capacity(message: Message, state: FSMContext) -> None:
             reply_markup=_cancel_kb(),
         )
         return
-    await state.update_data(capacity=int(raw))
-    await state.set_state(NewEvent.link)
-    await message.answer(
-        "Ссылка на комнату (её разошлю в момент старта):",
-        reply_markup=_cancel_kb(),
-    )
+    capacity = int(raw)
 
+    # This is the final step: create a dedicated meeting room sized to the
+    # capacity, then persist the event with that room's URL as its link.
+    await message.answer("Создаю комнату...")
+    try:
+        link = await create_room(capacity)
+    except MeetError as exc:
+        await state.clear()
+        logger.error("Room creation failed: %s", exc)
+        await message.answer(
+            "Не удалось создать комнату для мероприятия. "
+            f"Попробуй ещё раз — /admin.\n\nПричина: {texts.escape_title(str(exc))}",
+            parse_mode="HTML",
+        )
+        return
 
-@router.message(NewEvent.link)
-async def step_link(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     event = storage.create_event(
         kind=data["kind"],
         title=data["title"],
         description=data["description"],
-        link=message.text.strip(),
+        link=link,
         start=data["start"],
-        capacity=data["capacity"],
+        capacity=capacity,
     )
     await state.clear()
 
@@ -242,10 +249,12 @@ async def step_link(message: Message, state: FSMContext) -> None:
         f"{texts.escape_title(event.title)}\n"
         f"{texts.format_dt(start_dt)}\n"
         f"Лимит: {event.capacity}\n"
+        f"Комната: {texts.escape_title(event.link)}\n"
         f"Команда записи: /add_{event.id}\n"
         f"Участники: /who_{event.id}\n\n"
         f"{texts.FOOTER_HOME}",
         parse_mode="HTML",
+        disable_web_page_preview=True,
     )
 
 
