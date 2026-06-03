@@ -9,7 +9,8 @@ Example API exchange::
     POST https://meet.webaweba.com/api/rooms
     {"maxParticipants": 15}
 
-    -> {"slug": "wz8-h32-d9l",
+    -> 201 Created
+       {"slug": "wz8-h32-d9l",
         "url": "https://meet.webaweba.com/r/wz8-h32-d9l",
         "maxParticipants": 15}
 """
@@ -45,7 +46,7 @@ async def create_room(max_participants: int) -> str:
             async with session.post(
                 _ROOMS_URL, json={"maxParticipants": capacity}
             ) as resp:
-                if resp.status != 200:
+                if resp.status not in (200, 201):
                     body = await resp.text()
                     raise MeetError(f"HTTP {resp.status}: {body[:200]}")
                 data = await resp.json()
