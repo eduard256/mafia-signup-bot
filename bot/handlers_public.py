@@ -3,6 +3,7 @@
 Covers the visitor-facing flow:
 
 * ``/start``           — greeting image + the list of upcoming events.
+* ``/start add_<id>``  — deep link (t.me/<bot>?start=add_<id>), same as /add_<id>.
 * ``/add_<id>``        — sign up for an event.
 * ``/cancel_<id>``     — cancel a previous signup.
 
@@ -17,7 +18,7 @@ import re
 from datetime import datetime
 
 from aiogram import Bot, F, Router
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandObject, CommandStart
 from aiogram.types import Message
 
 from . import texts
@@ -32,10 +33,19 @@ router = Router(name="public")
 _ADD_RE = re.compile(r"^/add_(\d+)(?:@\w+)?$")
 _CANCEL_RE = re.compile(r"^/cancel_(\d+)(?:@\w+)?$")
 _WHO_RE = re.compile(r"^/who_(\d+)(?:@\w+)?$")
+# Deep-link payload of "/start add_12".
+_START_ADD_RE = re.compile(r"^add_(\d+)$")
 
 
 def _now() -> datetime:
     return datetime.now(tz=config.timezone)
+
+
+@router.message(CommandStart(deep_link=True, magic=F.args.regexp(_START_ADD_RE)))
+async def cmd_start_add(message: Message, bot: Bot, command: CommandObject) -> None:
+    """Deep link t.me/<bot>?start=add_<id>: sign up straight away."""
+    event_id = int(_START_ADD_RE.match(command.args).group(1))
+    await _sign_up(message, bot, event_id)
 
 
 @router.message(CommandStart())
@@ -62,9 +72,13 @@ async def cmd_start(message: Message, bot: Bot) -> None:
 @router.message(F.text.regexp(_ADD_RE))
 async def cmd_add(message: Message, bot: Bot) -> None:
     """Sign the user up for the event encoded in the command."""
+    event_id = int(_ADD_RE.match(message.text).group(1))
+    await _sign_up(message, bot, event_id)
+
+
+async def _sign_up(message: Message, bot: Bot, event_id: int) -> None:
     storage.remember_user(message.chat.id)
 
-    event_id = int(_ADD_RE.match(message.text).group(1))
     event = storage.get(event_id)
     if event is None or event.start_dt <= _now():
         await message.answer(texts.event_not_found(), parse_mode="HTML")
